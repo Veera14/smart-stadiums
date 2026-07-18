@@ -1,0 +1,533 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stadium, ChatMessage, Incident, IncidentType, SensorData } from '../types';
+import { MOCK_STADIUM_FAQS } from '../data';
+import StadiumMap from './StadiumMap';
+import { Send, MapPin, Sparkles, Volume2, Globe, HeartHandshake, ShieldAlert, AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface FanPortalProps {
+  currentStadium: Stadium;
+  sensors: SensorData[];
+  onAddIncident: (incident: Incident) => void;
+}
+
+const PRESET_PROMPTS = [
+  { text: "What is the Clear Bag policy?", icon: ShieldAlert },
+  { text: "Where can I find wheelchair-accessible elevators?", icon: HeartHandshake },
+  { text: "How do I catch the public transit shuttle?", icon: MapPin },
+  { text: "Are there drink cup recycling rewards?", icon: Sparkles }
+];
+
+export default function FanPortal({ currentStadium, sensors, onAddIncident }: FanPortalProps) {
+  // Chat state
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: 'f-init',
+      sender: 'assistant',
+      text: `Welcome to the ${currentStadium.name}! 🌟 I am your Multilingual FIFA World Cup 2026 Stadium Concierge. You can speak to me in any language! Ask me about clear bag policies, wheelchair access, shuttle timetables, recycling initiatives, or click on the map to ask specific questions about a location.`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Form Reporting state
+  const [reportLocation, setReportLocation] = useState('');
+  const [reportType, setReportType] = useState<IncidentType>('cleaning');
+  const [reportDescription, setReportDescription] = useState('');
+  const [isReporting, setIsReporting] = useState(false);
+  const [reportSuccessMsg, setReportSuccessMsg] = useState<string | null>(null);
+  const [reportSuccessDetails, setReportSuccessDetails] = useState<any | null>(null);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom of chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, isChatLoading]);
+
+  // Handle Map hotspot selection
+  const handleSelectLocation = (location: string) => {
+    setReportLocation(location);
+    // Also notify fan about selection in chat
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setChatMessages(prev => [
+      ...prev,
+      {
+        id: `f-map-sel-${Date.now()}`,
+        sender: 'assistant',
+        text: `You selected "${location}" on the interactive visualizer. How can I help you regarding this area? You can report any spill/incident here or ask about facility directions.`,
+        timestamp: time
+      }
+    ]);
+  };
+
+  // Submit chat query to Express endpoint
+  const handleSendChat = async (textToSend?: string) => {
+    const queryText = textToSend || chatInput;
+    if (!queryText.trim()) return;
+
+    if (!textToSend) setChatInput('');
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userMsg: ChatMessage = {
+      id: `u-${Date.now()}`,
+      sender: 'user',
+      text: queryText,
+      timestamp: time
+    };
+
+    setChatMessages(prev => [...prev, userMsg]);
+    setIsChatLoading(true);
+    setChatError(null);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...chatMessages, userMsg],
+          role: 'fan',
+          currentStadium,
+          sensors,
+          faqList: MOCK_STADIUM_FAQS
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Server error communicating with Gemini API.');
+      }
+
+      const data = await response.json();
+      
+      setChatMessages(prev => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          sender: 'assistant',
+          text: data.text,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } catch (err: any) {
+      console.warn('Gemini Chat failed, activating local concierge responder fallback:', err);
+      
+      // Heuristic local answering engine
+      const queryLower = queryText.toLowerCase();
+      let responseText = "";
+
+      if (queryLower.includes('bag') || queryLower.includes('policy') || queryLower.includes('bolso') || queryLower.includes('mochila')) {
+        responseText = `💼 [Offline Assistant Backup]: For FIFA World Cup 2026, the stadium enforces a strict Clear Bag Policy. Fans may bring one clear plastic bag not exceeding 12" x 6" x 12" (30 x 15 x 30 cm), or a small clutch purse under 4.5" x 6.5" (11 x 16 cm). All non-clear backpacks are strictly prohibited.`;
+      } else if (queryLower.includes('elevator') || queryLower.includes('wheelchair') || queryLower.includes('accessible') || queryLower.includes('silla de ruedas') || queryLower.includes('rampa')) {
+        responseText = `♿ [Offline Assistant Backup]: Wheelchair-accessible elevators are located at Gates A, C, and G. There are also designated companion seating areas in Sections 108, 124, 204, and 315. Accessible golf carts are available outside Parking Lot E to transport fans to the main plaza.`;
+      } else if (queryLower.includes('transit') || queryLower.includes('shuttle') || queryLower.includes('bus') || queryLower.includes('train') || queryLower.includes('shuttles')) {
+        responseText = `🚌 [Offline Assistant Backup]: Complimentary public transit shuttle buses run continuously from 3 hours pre-match until 2 hours post-match. Pick-up and drop-off stations are positioned at the North Plaza Transit Loop (directly outside Gate B).`;
+      } else if (queryLower.includes('recycle') || queryLower.includes('reward') || queryLower.includes('cup') || queryLower.includes('reciclar')) {
+        responseText = `♻️ [Offline Assistant Backup]: Help us reach our 50% sustainability target! Return your reusable beverage cup to any 'Green Goal' kiosk located on the main concourse to receive a 50% refund or entry into the grand prize draw for final match tickets.`;
+      } else {
+        // Find matching question from mock FAQs if possible
+        const matchedFaq = MOCK_STADIUM_FAQS.find(faq => 
+          queryLower.includes(faq.q.toLowerCase()) || 
+          faq.q.toLowerCase().split(' ').some(word => word.length > 4 && queryLower.includes(word))
+        );
+
+        if (matchedFaq) {
+          responseText = `💡 [Offline Assistant Backup]: Regarding "${matchedFaq.q}": ${matchedFaq.a}`;
+        } else {
+          responseText = `🤖 [Offline Assistant Backup]: I'm currently running in local backup mode to protect your session from rate limits. I'm connected to the operations dashboard of ${currentStadium.name} located in ${currentStadium.city}, ${currentStadium.country}. 
+
+You can ask me about:
+1. Clear Bag Policies
+2. Wheelchair Elevators
+3. Shuttle Transit Loops
+4. Reusable Cup Recycling Rewards`;
+        }
+      }
+
+      setChatMessages(prev => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          sender: 'assistant',
+          text: responseText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  // Submit high-fidelity incident report
+  const handleReportIncident = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportLocation.trim() || !reportDescription.trim()) return;
+
+    setIsReporting(true);
+    setReportSuccessMsg(null);
+    setReportSuccessDetails(null);
+
+    try {
+      const response = await fetch('/api/translate-incident', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section: reportLocation,
+          description: reportDescription
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error processing incident.');
+      }
+
+      const analysis = await response.json();
+      
+      const newIncident: Incident = {
+        id: `inc-${Date.now()}`,
+        section: reportLocation,
+        type: analysis.type || reportType,
+        description: reportDescription,
+        reportedAt: new Date().toISOString(),
+        status: 'pending',
+        originalLanguage: analysis.originalLanguage || 'Detected Language',
+        translatedDescription: analysis.translatedDescription,
+        suggestedAction: analysis.suggestedAction
+      };
+
+      onAddIncident(newIncident);
+      setReportSuccessDetails(analysis);
+      setReportSuccessMsg(`Successfully registered incident! It has been translated and dispatched.`);
+      
+      // Clear inputs
+      setReportDescription('');
+      setReportLocation('');
+    } catch (err: any) {
+      console.warn('Gemini translation failed, executing local heuristic parser:', err);
+      
+      // Perform local rule-based translation/categorization
+      const textLower = reportDescription.toLowerCase();
+      let type: IncidentType = reportType;
+      let originalLanguage = "English";
+
+      // Detect language heuristics
+      if (textLower.includes(' la ') || textLower.includes(' el ') || textLower.includes('está') || textLower.includes(' para ') || textLower.includes('con ')) {
+        originalLanguage = "Spanish";
+      } else if (textLower.includes(' oui ') || textLower.includes(' le ') || textLower.includes(' la ') || textLower.includes('est ')) {
+        originalLanguage = "French";
+      }
+
+      // Detect type heuristics
+      if (textLower.includes('spill') || textLower.includes('water') || textLower.includes('wet') || textLower.includes('mojado') || textLower.includes('limpieza') || textLower.includes('basura')) {
+        type = 'cleaning';
+      } else if (textLower.includes('fight') || textLower.includes('security') || textLower.includes('stole') || textLower.includes('police') || textLower.includes('seguridad') || textLower.includes('robo')) {
+        type = 'security';
+      } else if (textLower.includes('hurt') || textLower.includes('doctor') || textLower.includes('medical') || textLower.includes('blood') || textLower.includes('faint') || textLower.includes('ayuda')) {
+        type = 'medical';
+      } else if (textLower.includes('wheelchair') || textLower.includes('elevador') || textLower.includes('elevator') || textLower.includes('access') || textLower.includes('rampa')) {
+        type = 'accessibility';
+      } else if (textLower.includes('light') || textLower.includes('broken') || textLower.includes('gate') || textLower.includes('leak') || textLower.includes('ruptura')) {
+        type = 'infrastructure';
+      }
+
+      const mockAnalysis = {
+        type,
+        originalLanguage,
+        translatedDescription: originalLanguage === 'English' ? reportDescription : `[Heuristic Translation]: ${reportDescription}`,
+        suggestedAction: `Deploy ${type} team to Section ${reportLocation} to handle reported condition.`
+      };
+
+      const newIncident: Incident = {
+        id: `inc-${Date.now()}`,
+        section: reportLocation,
+        type: type,
+        description: reportDescription,
+        reportedAt: new Date().toISOString(),
+        status: 'pending',
+        originalLanguage: mockAnalysis.originalLanguage,
+        translatedDescription: mockAnalysis.translatedDescription,
+        suggestedAction: mockAnalysis.suggestedAction
+      };
+
+      onAddIncident(newIncident);
+      setReportSuccessDetails(mockAnalysis);
+      setReportSuccessMsg(`Registered incident under local heuristic dispatcher backup.`);
+      
+      // Clear inputs
+      setReportDescription('');
+      setReportLocation('');
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto items-stretch">
+      {/* Left Column: Map Visualizer & Live Report Form (lg:col-span-5) */}
+      <div className="lg:col-span-5 flex flex-col gap-6">
+        
+        {/* Stadium Map Card */}
+        <StadiumMap 
+          sensors={sensors} 
+          onSelectLocation={handleSelectLocation} 
+          selectedLocation={reportLocation} 
+        />
+
+        {/* Real-time Reporting Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between flex-1">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Globe size={18} className="text-emerald-400" />
+              <h3 className="text-base font-semibold text-slate-100">Multilingual Incident Dispatch</h3>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed mb-4">
+              Spotted an issue? (Water spill, broken elevator, first-aid request). Post it below in <strong>any language</strong>. Our GenAI translator will instantly categorize, translate to English, and dispatch to venue supervisors.
+            </p>
+
+            <form onSubmit={handleReportIncident} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                  Location / Section (Click map to auto-fill)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={reportLocation}
+                  onChange={(e) => setReportLocation(e.target.value)}
+                  placeholder="e.g., Section 112 Row K, or click map hotspot"
+                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    Preset Type
+                  </label>
+                  <select
+                    value={reportType}
+                    onChange={(e) => setReportType(e.target.value as IncidentType)}
+                    className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                  >
+                    <option value="cleaning">🧹 Cleaning Spill</option>
+                    <option value="security">🛡️ Security Concern</option>
+                    <option value="medical">🚑 Medical Assist</option>
+                    <option value="accessibility">♿ Accessibility Aid</option>
+                    <option value="infrastructure">🔧 Infra Failure</option>
+                    <option value="other">❓ Other Issue</option>
+                  </select>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <span className="text-[9px] font-mono text-emerald-400/80 bg-emerald-950/20 border border-emerald-900/30 rounded-xl px-2.5 py-2 leading-tight">
+                    🌐 Real-time AI Translation Active
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                  Description (Any Language)
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  placeholder="e.g., 'There is broken glass here.' or 'La rampa de silla de ruedas está bloqueada por basura.'"
+                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-all resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isReporting}
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/50 text-slate-950 font-semibold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
+              >
+                {isReporting ? (
+                  <>
+                    <span className="animate-spin text-sm">⏳</span>
+                    <span>AI Analyzing & Translating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe size={13} />
+                    <span>Submit & Dispatch Incident</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Success Result Container */}
+          <AnimatePresence>
+            {reportSuccessMsg && reportSuccessDetails && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="mt-3 p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-xl text-[11px]"
+              >
+                <div className="flex items-center gap-1.5 text-emerald-400 font-semibold mb-1">
+                  <CheckCircle size={14} />
+                  <span>{reportSuccessMsg}</span>
+                </div>
+                <div className="space-y-1 text-slate-300 font-mono text-[10px]">
+                  <div>
+                    <span className="text-slate-500">Detected Language:</span>{' '}
+                    <span className="text-emerald-300 font-bold">{reportSuccessDetails.originalLanguage}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">English Translation:</span>{' '}
+                    <span className="text-slate-200">"{reportSuccessDetails.translatedDescription}"</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Dispatched Action:</span>{' '}
+                    <span className="text-amber-300 font-medium">{reportSuccessDetails.suggestedAction}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setReportSuccessMsg(null)}
+                  className="mt-2 text-[9px] text-slate-500 hover:text-slate-300 underline"
+                >
+                  Clear receipt
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Right Column: AI Assistant Chat Interface (lg:col-span-7) */}
+      <div className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden min-h-[500px]">
+        {/* Chat Header */}
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-inner">
+              <Sparkles size={16} className="animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200">FIFA World Cup AI Concierge</h3>
+              <p className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Gemini 3.5-Flash Online</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded-lg">
+            <Globe size={11} className="text-emerald-400" />
+            <span>Multilingual Support</span>
+          </div>
+        </div>
+
+        {/* Chat Message Scrollport */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <AnimatePresence initial={false}>
+            {chatMessages.map((msg) => {
+              const isUser = msg.sender === 'user';
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl p-3.5 text-xs shadow-md leading-relaxed ${
+                      isUser
+                        ? 'bg-emerald-600 text-slate-950 rounded-tr-none'
+                        : 'bg-slate-950 border border-slate-800/50 text-slate-200 rounded-tl-none'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-6 mb-1 text-[9px] opacity-60 font-mono">
+                      <span className="font-bold">{isUser ? 'YOU' : 'FIFA CO-PILOT'}</span>
+                      <span>{msg.timestamp}</span>
+                    </div>
+                    <p className="whitespace-pre-line">{msg.text}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+
+          {isChatLoading && (
+            <div className="flex justify-start">
+              <div className="bg-slate-950 border border-slate-800/50 rounded-2xl rounded-tl-none p-3.5 max-w-[80%] flex items-center gap-2">
+                <span className="flex gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">AI is composing guidelines...</span>
+              </div>
+            </div>
+          )}
+
+          {chatError && (
+            <div className="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl flex items-start gap-2 text-xs text-rose-300">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold mb-0.5">Communication Issue</p>
+                <p className="text-[10px] leading-relaxed text-slate-400">{chatError}</p>
+              </div>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Preset Prompt Suggestions */}
+        <div className="px-5 py-2.5 border-t border-slate-800 bg-slate-950/20 flex gap-2 overflow-x-auto scrollbar-none">
+          {PRESET_PROMPTS.map((prompt, i) => {
+            const Icon = prompt.icon;
+            return (
+              <button
+                key={i}
+                onClick={() => handleSendChat(prompt.text)}
+                disabled={isChatLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:border-emerald-500/30 text-[10px] text-slate-300 rounded-xl transition-all hover:bg-slate-900"
+              >
+                <Icon size={11} className="text-emerald-400" />
+                <span>{prompt.text}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Chat Input Bar */}
+        <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendChat();
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask about bag policy, elevators, shuttles, map directions..."
+              disabled={isChatLoading}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={isChatLoading || !chatInput.trim()}
+              className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 flex items-center justify-center transition-colors disabled:bg-slate-800 disabled:text-slate-600"
+            >
+              <Send size={15} />
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
