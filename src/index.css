@@ -12,3 +12,15 @@ body {
   color: #f1f5f9;
 }
 
+@keyframes dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.animate-dash {
+  stroke-dasharray: 6,4;
+  animation: dash 1s linear infinite;
+}
+
+

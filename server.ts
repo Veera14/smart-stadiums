@@ -266,4 +266,8 @@ async function startServer() {
   });
 }
 
-startServer();
+export { app, ai };
+
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}

@@ -23,6 +23,85 @@ export default function StadiumMap({ sensors, onSelectLocation, selectedLocation
     }
   };
 
+  // Maps selected visual hotspots and locations to active animated dash SVG paths
+  const getNavigationPath = (location: string): { d: string; color: string; label: string } | null => {
+    const norm = location.toLowerCase();
+    
+    if (norm.includes('elevator') || norm.includes('ascenseur') || norm.includes('accessibility')) {
+      // Accessibility elevators route (West Gate A to West Elevator) - Colored Cyan
+      return {
+        d: 'M 50 150 Q 60 190 90 220',
+        color: 'stroke-cyan-400',
+        label: 'Wheelchair-Accessible elevator path'
+      };
+    }
+    
+    if (norm.includes('shuttle') || norm.includes('transit') || norm.includes('navette') || norm.includes('transport')) {
+      // Transit loop path (West Gate A to Shuttle Loop) - Colored Amber
+      return {
+        d: 'M 50 150 Q 80 230 150 270',
+        color: 'stroke-amber-400',
+        label: 'Transit shuttle loop route'
+      };
+    }
+    
+    if (norm.includes('subway') || norm.includes('metro') || norm.includes('subterráneo')) {
+      // Subway rail path (East Gate B to Subway Link) - Colored Indigo
+      return {
+        d: 'M 350 150 Q 320 230 250 270',
+        color: 'stroke-indigo-400',
+        label: 'Subway station access route'
+      };
+    }
+    
+    if (norm.includes('level 1') || norm.includes('concourse')) {
+      // Concourse Level 1 path (West Gate A to Level 1 Concourse) - Colored Emerald
+      return {
+        d: 'M 50 150 C 70 90, 120 70, 200 65',
+        color: 'stroke-emerald-400',
+        label: 'Concourse level navigation path'
+      };
+    }
+    
+    if (norm.includes('112 concessions') || norm.includes('112')) {
+      // Gate A to Section 112 Concessions - Colored Emerald
+      return {
+        d: 'M 50 150 Q 90 110 130 90',
+        color: 'stroke-emerald-400',
+        label: 'Concessions 112 access path'
+      };
+    }
+    
+    if (norm.includes('128 concessions') || norm.includes('128')) {
+      // Gate B to Section 128 Concessions - Colored Emerald
+      return {
+        d: 'M 350 150 Q 310 110 270 90',
+        color: 'stroke-emerald-400',
+        label: 'Concessions 128 access path'
+      };
+    }
+    
+    if (norm.includes('north grandstand')) {
+      // Gate A to North Seating Tier - Colored Emerald
+      return {
+        d: 'M 50 150 Q 100 50 200 50',
+        color: 'stroke-emerald-400',
+        label: 'North Grandstand seating navigation path'
+      };
+    }
+    
+    if (norm.includes('south grandstand')) {
+      // Gate A to South Seating Tier - Colored Emerald
+      return {
+        d: 'M 50 150 Q 100 250 200 250',
+        color: 'stroke-emerald-400',
+        label: 'South Grandstand seating navigation path'
+      };
+    }
+    
+    return null;
+  };
+
   // Helper to get color according to sensor status
   const getStatusColor = (status: 'normal' | 'warning' | 'critical') => {
     switch (status) {
@@ -129,6 +208,28 @@ export default function StadiumMap({ sensors, onSelectLocation, selectedLocation
                 className={`fill-slate-700/20 hover:fill-emerald-500/10 stroke-slate-600/30 cursor-pointer focus:outline-none focus:fill-emerald-500/20 transition-colors ${
                   selectedLocation === 'South Grandstand (Level 2)' ? 'fill-emerald-500/20 stroke-emerald-500/50' : ''
                 }`} />
+
+          {/* Dynamic Navigation & Accessibility Route Overlay */}
+          {selectedLocation && (() => {
+            const navPath = getNavigationPath(selectedLocation);
+            if (!navPath) return null;
+            return (
+              <g>
+                {/* Glow underlay */}
+                <path
+                  d={navPath.d}
+                  className={`fill-none stroke-[6px] opacity-35 blur-[2px] ${navPath.color}`}
+                  aria-hidden="true"
+                />
+                {/* Animated dash overlay */}
+                <path
+                  d={navPath.d}
+                  className={`fill-none stroke-2 animate-dash ${navPath.color}`}
+                  aria-label={navPath.label}
+                />
+              </g>
+            );
+          })()}
 
           {/* Render Sensor Hotspots */}
           {sensors.map((sensor) => {

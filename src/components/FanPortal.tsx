@@ -45,6 +45,21 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
   const [reportSuccessMsg, setReportSuccessMsg] = useState<string | null>(null);
   const [reportSuccessDetails, setReportSuccessDetails] = useState<any | null>(null);
 
+  // Sustainability Metrics state
+  const [cupReturns, setCupReturns] = useState(0);
+  const [greenPoints, setGreenPoints] = useState(0);
+  const [unlockedVoucher, setUnlockedVoucher] = useState(false);
+  const [showVoucherReveal, setShowVoucherReveal] = useState(false);
+
+  const handleSimulateReturn = () => {
+    const nextReturns = cupReturns + 1;
+    setCupReturns(nextReturns);
+    setGreenPoints(nextReturns * 50); // 50 points per cup
+    if (nextReturns * 50 >= 150) {
+      setUnlockedVoucher(true);
+    }
+  };
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom of chat
@@ -274,12 +289,86 @@ You can ask me about:
       {/* Left Column: Map Visualizer & Live Report Form (lg:col-span-5) */}
       <div className="lg:col-span-5 flex flex-col gap-6">
         
-        {/* Stadium Map Card */}
         <StadiumMap 
           sensors={sensors} 
           onSelectLocation={handleSelectLocation} 
           selectedLocation={reportLocation} 
         />
+
+        {/* Green Goals Sustainability Tracker Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none"></div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-emerald-400 shrink-0" />
+                <h3 className="text-sm font-bold text-slate-100">Green Goals Cup Return</h3>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-900/30 px-2 py-0.5 rounded-full">
+                Target: 150 pts
+              </span>
+            </div>
+            
+            <p className="text-[11px] text-slate-400 leading-relaxed mb-4">
+              Return reusable stadium beverage cups to any "Green Goal" kiosk to reduce landfill waste. Earn points to unlock a <strong>50% off discount voucher</strong>.
+            </p>
+
+            {/* Sustainability Metrics Display */}
+            <div className="grid grid-cols-3 gap-2.5 mb-4">
+              <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl text-center">
+                <div className="text-slate-500 text-[9px] font-mono font-bold uppercase tracking-wider">Cups Returned</div>
+                <div className="text-base font-black text-slate-200 mt-0.5">{cupReturns}</div>
+              </div>
+              <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl text-center">
+                <div className="text-slate-500 text-[9px] font-mono font-bold uppercase tracking-wider">Green Points</div>
+                <div className="text-base font-black text-emerald-400 mt-0.5">{greenPoints}</div>
+              </div>
+              <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl text-center">
+                <div className="text-slate-500 text-[9px] font-mono font-bold uppercase tracking-wider">CO2 Saved</div>
+                <div className="text-base font-black text-slate-200 mt-0.5">{(cupReturns * 0.08).toFixed(2)} kg</div>
+              </div>
+            </div>
+
+            {/* Simulated Return action */}
+            <button
+              onClick={handleSimulateReturn}
+              className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/30 font-semibold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              ♻️ Scan & Simulate Cup Return
+            </button>
+          </div>
+
+          {/* Unlocked Reward Overlay Banner */}
+          {unlockedVoucher && (
+            <div className="mt-4 p-3 bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-800/50 rounded-xl relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-emerald-400 tracking-wider uppercase font-mono">🏆 Reward Achieved</div>
+                  <div className="text-xs text-slate-200 font-semibold mt-0.5">50% Food & Concessions Voucher</div>
+                </div>
+                <button
+                  onClick={() => setShowVoucherReveal(!showVoucherReveal)}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  {showVoucherReveal ? "Hide Code" : "Reveal Code"}
+                </button>
+              </div>
+
+              {/* Reveal Code Box */}
+              {showVoucherReveal && (
+                <motion.div
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-3 bg-slate-950 border border-emerald-900/40 p-2.5 rounded-lg flex flex-col items-center gap-1"
+                >
+                  <span className="text-[9px] font-mono text-slate-500 uppercase">Scan voucher at counter</span>
+                  <span className="text-sm font-mono font-bold tracking-widest text-emerald-400">FIFA2026-GREEN-HERO</span>
+                  <div className="w-full h-1 bg-gradient-to-r from-slate-950 via-emerald-800/40 to-slate-950 mt-1"></div>
+                </motion.div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Real-time Reporting Card */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between flex-1">
