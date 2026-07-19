@@ -5,7 +5,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert';
-import { generateLocalAnalysis } from '../src/heuristics';
+import { 
+  generateLocalAnalysis,
+  generateLocalConciergeResponse,
+  generateLocalIncidentTranslation
+} from '../src/heuristics';
 import { SensorData, Incident } from '../src/types';
 
 test('heuristics - baseline/normal operations', () => {
@@ -91,3 +95,52 @@ test('heuristics - safety score respects minimum limit', () => {
   // Baseline 98 - (10 * 12) = -22. Bound check sets minimum to 15.
   assert.strictEqual(result.safetyRating, 15);
 });
+
+test('heuristics - generateLocalConciergeResponse offline chatbot replies', () => {
+  const faq = [{ q: "test question", a: "test answer" }];
+  
+  // Clear bag policies
+  const bagReply = generateLocalConciergeResponse('What is your bag policy?', 'MetLife', 'New York', 'USA', faq);
+  assert.match(bagReply, /Clear Bag Policy/);
+  
+  // Wheelchair accessible elevators
+  const wheelchairReply = generateLocalConciergeResponse('Is there wheelchair access?', 'MetLife', 'New York', 'USA', faq);
+  assert.match(wheelchairReply, /Wheelchair-accessible elevators/);
+  
+  // Transport shuttle loop
+  const transitReply = generateLocalConciergeResponse('How to catch the shuttle?', 'MetLife', 'New York', 'USA', faq);
+  assert.match(transitReply, /North Plaza Transit Loop/);
+  
+  // Sustainability Cup rewards
+  const recycleReply = generateLocalConciergeResponse('Where can I recycle my cup?', 'MetLife', 'New York', 'USA', faq);
+  assert.match(recycleReply, /Green Goal/);
+
+  // FAQ matching
+  const faqReply = generateLocalConciergeResponse('tell me about test question', 'MetLife', 'New York', 'USA', faq);
+  assert.match(faqReply, /Regarding "test question": test answer/);
+
+  // Default fallback instructions
+  const defaultReply = generateLocalConciergeResponse('unknown query', 'MetLife Stadium', 'East Rutherford', 'USA', faq);
+  assert.match(defaultReply, /running in local backup mode/);
+  assert.match(defaultReply, /MetLife Stadium/);
+});
+
+test('heuristics - generateLocalIncidentTranslation detects language and maps types', () => {
+  // English spill -> cleaning
+  const res1 = generateLocalIncidentTranslation('There is a water spill here', '114', 'other');
+  assert.strictEqual(res1.type, 'cleaning');
+  assert.strictEqual(res1.originalLanguage, 'English');
+  assert.strictEqual(res1.suggestedAction, 'Deploy cleaning team to Section 114 to handle reported condition.');
+
+  // Spanish wheelchair -> accessibility
+  const res2 = generateLocalIncidentTranslation('La rampa de silla de ruedas está bloqueada', 'Gate B', 'other');
+  assert.strictEqual(res2.type, 'accessibility');
+  assert.strictEqual(res2.originalLanguage, 'Spanish');
+  assert.match(res2.translatedDescription, /Heuristic Translation/);
+
+  // French fight -> security
+  const res3 = generateLocalIncidentTranslation('Il y a une bagarre le oui', 'Section 104', 'other');
+  assert.strictEqual(res3.type, 'security');
+  assert.strictEqual(res3.originalLanguage, 'French');
+});
+

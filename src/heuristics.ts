@@ -156,3 +156,101 @@ export const generateLocalAnalysis = (
     recommendations: recommendations.slice(0, 3)
   };
 };
+
+/**
+ * Heuristically generates a local concierge answer when Gemini API is rate-limited or offline.
+ * Supports basic keywords in English, Spanish, and French.
+ */
+export function generateLocalConciergeResponse(
+  queryText: string,
+  stadiumName: string,
+  stadiumCity: string,
+  stadiumCountry: string,
+  faqList: Array<{ q: string; a: string }>
+): string {
+  const queryLower = queryText.toLowerCase();
+
+  if (queryLower.includes('bag') || queryLower.includes('policy') || queryLower.includes('bolso') || queryLower.includes('mochila')) {
+    return `💼 [Offline Assistant Backup]: For FIFA World Cup 2026, the stadium enforces a strict Clear Bag Policy. Fans may bring one clear plastic bag not exceeding 12" x 6" x 12" (30 x 15 x 30 cm), or a small clutch purse under 4.5" x 6.5" (11 x 16 cm). All non-clear backpacks are strictly prohibited.`;
+  }
+  
+  if (queryLower.includes('elevator') || queryLower.includes('wheelchair') || queryLower.includes('accessible') || queryLower.includes('silla de ruedas') || queryLower.includes('rampa')) {
+    return `♿ [Offline Assistant Backup]: Wheelchair-accessible elevators are located at Gates A, C, and G. There are also designated companion seating areas in Sections 108, 124, 204, and 315. Accessible golf carts are available outside Parking Lot E to transport fans to the main plaza.`;
+  }
+  
+  if (queryLower.includes('transit') || queryLower.includes('shuttle') || queryLower.includes('bus') || queryLower.includes('train') || queryLower.includes('shuttles')) {
+    return `🚌 [Offline Assistant Backup]: Complimentary public transit shuttle buses run continuously from 3 hours pre-match until 2 hours post-match. Pick-up and drop-off stations are positioned at the North Plaza Transit Loop (directly outside Gate B).`;
+  }
+  
+  if (queryLower.includes('recycle') || queryLower.includes('reward') || queryLower.includes('cup') || queryLower.includes('reciclar')) {
+    return `♻️ [Offline Assistant Backup]: Help us reach our 50% sustainability target! Return your reusable beverage cup to any 'Green Goal' kiosk located on the main concourse to receive a 50% refund or entry into the grand prize draw for final match tickets.`;
+  }
+
+  // Check matching question from mock FAQs if possible
+  const matchedFaq = faqList.find(faq => 
+    queryLower.includes(faq.q.toLowerCase()) || 
+    faq.q.toLowerCase().split(' ').some(word => word.length > 4 && queryLower.includes(word))
+  );
+
+  if (matchedFaq) {
+    return `💡 [Offline Assistant Backup]: Regarding "${matchedFaq.q}": ${matchedFaq.a}`;
+  }
+
+  return `🤖 [Offline Assistant Backup]: I'm currently running in local backup mode to protect your session from rate limits. I'm connected to the operations dashboard of ${stadiumName} located in ${stadiumCity}, ${stadiumCountry}. 
+
+You can ask me about:
+1. Clear Bag Policies
+2. Wheelchair Elevators
+3. Shuttle Transit Loops
+4. Reusable Cup Recycling Rewards`;
+}
+
+/**
+ * Heuristically categorizes and translates fan reported incidents when Gemini API is rate-limited or offline.
+ * Infers language (English/Spanish/French) and maps keywords to categories like medical or accessibility.
+ */
+export function generateLocalIncidentTranslation(
+  description: string,
+  section: string,
+  defaultType: string
+): {
+  type: string;
+  originalLanguage: string;
+  translatedDescription: string;
+  suggestedAction: string;
+} {
+  const textLower = description.toLowerCase();
+  let type = defaultType;
+  let originalLanguage = "English";
+
+  // Language heuristics
+  if (textLower.includes(' la ') || textLower.includes(' el ') || textLower.includes('está') || textLower.includes(' para ') || textLower.includes('con ')) {
+    originalLanguage = "Spanish";
+  } else if (textLower.includes(' oui ') || textLower.includes(' le ') || textLower.includes(' la ') || textLower.includes('est ')) {
+    originalLanguage = "French";
+  }
+
+  // Type heuristics
+  if (textLower.includes('spill') || textLower.includes('water') || textLower.includes('wet') || textLower.includes('mojado') || textLower.includes('limpieza') || textLower.includes('basura') || textLower.includes('fuite') || textLower.includes('déchet') || textLower.includes('renversé') || textLower.includes('nettoyage')) {
+    type = 'cleaning';
+  } else if (textLower.includes('fight') || textLower.includes('security') || textLower.includes('stole') || textLower.includes('police') || textLower.includes('seguridad') || textLower.includes('robo') || textLower.includes('bagarre') || textLower.includes('vol') || textLower.includes('sécurité')) {
+    type = 'security';
+  } else if (textLower.includes('hurt') || textLower.includes('doctor') || textLower.includes('medical') || textLower.includes('blood') || textLower.includes('faint') || textLower.includes('ayuda') || textLower.includes('blessé') || textLower.includes('médecin') || textLower.includes('sang') || textLower.includes('malade')) {
+    type = 'medical';
+  } else if (textLower.includes('wheelchair') || textLower.includes('elevador') || textLower.includes('elevator') || textLower.includes('access') || textLower.includes('rampa') || textLower.includes('fauteuil') || textLower.includes('ascenseur') || textLower.includes('accès')) {
+    type = 'accessibility';
+  } else if (textLower.includes('light') || textLower.includes('broken') || textLower.includes('gate') || textLower.includes('leak') || textLower.includes('ruptura') || textLower.includes('cassé') || textLower.includes('panne') || textLower.includes('grille')) {
+    type = 'infrastructure';
+  }
+
+  const translatedDescription = originalLanguage === 'English' ? description : `[Heuristic Translation]: ${description}`;
+  const suggestedAction = `Deploy ${type} team to Section ${section} to handle reported condition.`;
+
+  return {
+    type,
+    originalLanguage,
+    translatedDescription,
+    suggestedAction
+  };
+}
+

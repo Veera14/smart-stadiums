@@ -7,6 +7,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Stadium, ChatMessage, Incident, IncidentType, SensorData } from '../types';
 import { MOCK_STADIUM_FAQS } from '../data';
 import StadiumMap from './StadiumMap';
+import { generateLocalConciergeResponse, generateLocalIncidentTranslation } from '../heuristics';
+import { calculateGreenPoints, calculateCarbonOffset, isVoucherUnlocked } from '../utils/sustainability';
 import { Send, MapPin, Sparkles, Volume2, Globe, HeartHandshake, ShieldAlert, AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -43,7 +45,12 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
   const [reportDescription, setReportDescription] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [reportSuccessMsg, setReportSuccessMsg] = useState<string | null>(null);
-  const [reportSuccessDetails, setReportSuccessDetails] = useState<any | null>(null);
+  const [reportSuccessDetails, setReportSuccessDetails] = useState<{
+    type: string;
+    originalLanguage: string;
+    translatedDescription: string;
+    suggestedAction: string;
+  } | null>(null);
 
   // Sustainability Metrics state
   const [cupReturns, setCupReturns] = useState(0);
@@ -54,8 +61,9 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
   const handleSimulateReturn = () => {
     const nextReturns = cupReturns + 1;
     setCupReturns(nextReturns);
-    setGreenPoints(nextReturns * 50); // 50 points per cup
-    if (nextReturns * 50 >= 150) {
+    const points = calculateGreenPoints(nextReturns);
+    setGreenPoints(points);
+    if (isVoucherUnlocked(points)) {
       setUnlockedVoucher(true);
     }
   };
@@ -131,40 +139,17 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
-    } catch (err: any) {
-      console.warn('Gemini Chat failed, activating local concierge responder fallback:', err);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.warn('Gemini Chat failed, activating local concierge responder fallback:', errorMsg);
       
-      // Heuristic local answering engine
-      const queryLower = queryText.toLowerCase();
-      let responseText = "";
-
-      if (queryLower.includes('bag') || queryLower.includes('policy') || queryLower.includes('bolso') || queryLower.includes('mochila')) {
-        responseText = `💼 [Offline Assistant Backup]: For FIFA World Cup 2026, the stadium enforces a strict Clear Bag Policy. Fans may bring one clear plastic bag not exceeding 12" x 6" x 12" (30 x 15 x 30 cm), or a small clutch purse under 4.5" x 6.5" (11 x 16 cm). All non-clear backpacks are strictly prohibited.`;
-      } else if (queryLower.includes('elevator') || queryLower.includes('wheelchair') || queryLower.includes('accessible') || queryLower.includes('silla de ruedas') || queryLower.includes('rampa')) {
-        responseText = `♿ [Offline Assistant Backup]: Wheelchair-accessible elevators are located at Gates A, C, and G. There are also designated companion seating areas in Sections 108, 124, 204, and 315. Accessible golf carts are available outside Parking Lot E to transport fans to the main plaza.`;
-      } else if (queryLower.includes('transit') || queryLower.includes('shuttle') || queryLower.includes('bus') || queryLower.includes('train') || queryLower.includes('shuttles')) {
-        responseText = `🚌 [Offline Assistant Backup]: Complimentary public transit shuttle buses run continuously from 3 hours pre-match until 2 hours post-match. Pick-up and drop-off stations are positioned at the North Plaza Transit Loop (directly outside Gate B).`;
-      } else if (queryLower.includes('recycle') || queryLower.includes('reward') || queryLower.includes('cup') || queryLower.includes('reciclar')) {
-        responseText = `♻️ [Offline Assistant Backup]: Help us reach our 50% sustainability target! Return your reusable beverage cup to any 'Green Goal' kiosk located on the main concourse to receive a 50% refund or entry into the grand prize draw for final match tickets.`;
-      } else {
-        // Find matching question from mock FAQs if possible
-        const matchedFaq = MOCK_STADIUM_FAQS.find(faq => 
-          queryLower.includes(faq.q.toLowerCase()) || 
-          faq.q.toLowerCase().split(' ').some(word => word.length > 4 && queryLower.includes(word))
-        );
-
-        if (matchedFaq) {
-          responseText = `💡 [Offline Assistant Backup]: Regarding "${matchedFaq.q}": ${matchedFaq.a}`;
-        } else {
-          responseText = `🤖 [Offline Assistant Backup]: I'm currently running in local backup mode to protect your session from rate limits. I'm connected to the operations dashboard of ${currentStadium.name} located in ${currentStadium.city}, ${currentStadium.country}. 
-
-You can ask me about:
-1. Clear Bag Policies
-2. Wheelchair Elevators
-3. Shuttle Transit Loops
-4. Reusable Cup Recycling Rewards`;
-        }
-      }
+      const responseText = generateLocalConciergeResponse(
+        queryText,
+        currentStadium.name,
+        currentStadium.city,
+        currentStadium.country,
+        MOCK_STADIUM_FAQS
+      );
 
       setChatMessages(prev => [
         ...prev,
@@ -225,45 +210,20 @@ You can ask me about:
       // Clear inputs
       setReportDescription('');
       setReportLocation('');
-    } catch (err: any) {
-      console.warn('Gemini translation failed, executing local heuristic parser:', err);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.warn('Gemini translation failed, executing local heuristic parser:', errorMsg);
       
-      // Perform local rule-based translation/categorization
-      const textLower = reportDescription.toLowerCase();
-      let type: IncidentType = reportType;
-      let originalLanguage = "English";
-
-      // Detect language heuristics
-      if (textLower.includes(' la ') || textLower.includes(' el ') || textLower.includes('está') || textLower.includes(' para ') || textLower.includes('con ')) {
-        originalLanguage = "Spanish";
-      } else if (textLower.includes(' oui ') || textLower.includes(' le ') || textLower.includes(' la ') || textLower.includes('est ')) {
-        originalLanguage = "French";
-      }
-
-      // Detect type heuristics
-      if (textLower.includes('spill') || textLower.includes('water') || textLower.includes('wet') || textLower.includes('mojado') || textLower.includes('limpieza') || textLower.includes('basura')) {
-        type = 'cleaning';
-      } else if (textLower.includes('fight') || textLower.includes('security') || textLower.includes('stole') || textLower.includes('police') || textLower.includes('seguridad') || textLower.includes('robo')) {
-        type = 'security';
-      } else if (textLower.includes('hurt') || textLower.includes('doctor') || textLower.includes('medical') || textLower.includes('blood') || textLower.includes('faint') || textLower.includes('ayuda')) {
-        type = 'medical';
-      } else if (textLower.includes('wheelchair') || textLower.includes('elevador') || textLower.includes('elevator') || textLower.includes('access') || textLower.includes('rampa')) {
-        type = 'accessibility';
-      } else if (textLower.includes('light') || textLower.includes('broken') || textLower.includes('gate') || textLower.includes('leak') || textLower.includes('ruptura')) {
-        type = 'infrastructure';
-      }
-
-      const mockAnalysis = {
-        type,
-        originalLanguage,
-        translatedDescription: originalLanguage === 'English' ? reportDescription : `[Heuristic Translation]: ${reportDescription}`,
-        suggestedAction: `Deploy ${type} team to Section ${reportLocation} to handle reported condition.`
-      };
+      const mockAnalysis = generateLocalIncidentTranslation(
+        reportDescription,
+        reportLocation,
+        reportType
+      );
 
       const newIncident: Incident = {
         id: `inc-${Date.now()}`,
         section: reportLocation,
-        type: type,
+        type: mockAnalysis.type as IncidentType,
         description: reportDescription,
         reportedAt: new Date().toISOString(),
         status: 'pending',
@@ -325,7 +285,7 @@ You can ask me about:
               </div>
               <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl text-center">
                 <div className="text-slate-500 text-[9px] font-mono font-bold uppercase tracking-wider">CO2 Saved</div>
-                <div className="text-base font-black text-slate-200 mt-0.5">{(cupReturns * 0.08).toFixed(2)} kg</div>
+                <div className="text-base font-black text-slate-200 mt-0.5">{calculateCarbonOffset(cupReturns)} kg</div>
               </div>
             </div>
 

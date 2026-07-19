@@ -9,7 +9,7 @@ import path from 'path';
 // 1. Run Vite build
 console.log('Building client with Vite...');
 const viteBin = path.join('node_modules', 'vite', 'bin', 'vite.js');
-const viteResult = spawnSync('node', [viteBin, 'build'], { stdio: 'inherit', shell: true });
+const viteResult = spawnSync('node', [viteBin, 'build'], { stdio: 'inherit', shell: false });
 
 if (viteResult.status !== 0) {
   process.exit(viteResult.status || 1);
@@ -40,5 +40,5 @@ if (process.platform === 'win32') {
   spawnArgs = ['esbuild', ...esbuildArgs];
 }
 
-const esbuildResult = spawnSync(esbuildCmd, spawnArgs, { stdio: 'inherit', shell: true });
+const esbuildResult = spawnSync(esbuildCmd, spawnArgs, { stdio: 'inherit', shell: false });
 process.exit(esbuildResult.status || 0);
