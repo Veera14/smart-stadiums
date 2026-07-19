@@ -28,7 +28,7 @@ const ai = new GoogleGenAI({
 });
 
 // Helper: Ensure API Key is present, fail-fast gracefully
-const checkApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkApiKey = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({
       error: 'GEMINI_API_KEY is not configured in the environment. Please add it in Settings > Secrets.'
@@ -256,7 +256,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

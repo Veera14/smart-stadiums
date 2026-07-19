@@ -9,7 +9,7 @@ import { MOCK_STADIUM_FAQS } from '../data';
 import StadiumMap from './StadiumMap';
 import { generateLocalConciergeResponse, generateLocalIncidentTranslation } from '../heuristics';
 import { calculateGreenPoints, calculateCarbonOffset, isVoucherUnlocked } from '../utils/sustainability';
-import { Send, MapPin, Sparkles, Volume2, Globe, HeartHandshake, ShieldAlert, AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
+import { Send, MapPin, Sparkles, Globe, HeartHandshake, ShieldAlert, AlertTriangle, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface FanPortalProps {
@@ -80,7 +80,7 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
     setReportLocation(location);
     // Also notify fan about selection in chat
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setChatMessages(prev => [
+    setChatMessages((prev: ChatMessage[]) => [
       ...prev,
       {
         id: `f-map-sel-${Date.now()}`,
@@ -106,7 +106,7 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
       timestamp: time
     };
 
-    setChatMessages(prev => [...prev, userMsg]);
+    setChatMessages((prev: ChatMessage[]) => [...prev, userMsg]);
     setIsChatLoading(true);
     setChatError(null);
 
@@ -130,7 +130,7 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
 
       const data = await response.json();
       
-      setChatMessages(prev => [
+      setChatMessages((prev: ChatMessage[]) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
@@ -151,7 +151,7 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
         MOCK_STADIUM_FAQS
       );
 
-      setChatMessages(prev => [
+      setChatMessages((prev: ChatMessage[]) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
@@ -479,7 +479,7 @@ export default function FanPortal({ currentStadium, sensors, onAddIncident }: Fa
         {/* Chat Message Scrollport */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <AnimatePresence initial={false}>
-            {chatMessages.map((msg) => {
+            {chatMessages.map((msg: ChatMessage) => {
               const isUser = msg.sender === 'user';
               return (
                 <motion.div

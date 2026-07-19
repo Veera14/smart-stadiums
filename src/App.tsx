@@ -3,14 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Role, Stadium, Incident, SensorData } from './types';
+import { useState, ChangeEvent } from 'react';
+import { Role, Incident, SensorData } from './types';
 import { STADIUMS, SCENARIO_PRESETS, INITIAL_INCIDENTS } from './data';
 import FanPortal from './components/FanPortal';
 import StaffPortal from './components/StaffPortal';
 import { 
-  Trophy, MapPin, Users, HelpCircle, Shield, Globe, 
-  Calendar, Info, Compass, ShieldAlert, Heart, Settings
+  Trophy, MapPin, Shield, Compass
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -26,11 +25,11 @@ export default function App() {
 
   // Callbacks to manage incidents from both portals
   const handleAddIncident = (newIncident: Incident) => {
-    setIncidents(prev => [newIncident, ...prev]);
+    setIncidents((prev: Incident[]) => [newIncident, ...prev]);
   };
 
   const handleUpdateIncidentStatus = (id: string, status: 'pending' | 'dispatched' | 'resolved') => {
-    setIncidents(prev => prev.map(inc => {
+    setIncidents((prev: Incident[]) => prev.map((inc: Incident) => {
       if (inc.id === id) {
         return { ...inc, status };
       }
@@ -39,7 +38,7 @@ export default function App() {
   };
 
   const handleClearResolvedIncidents = () => {
-    setIncidents(prev => prev.filter(inc => inc.status !== 'resolved'));
+    setIncidents((prev: Incident[]) => prev.filter((inc: Incident) => inc.status !== 'resolved'));
   };
 
   return (
@@ -76,7 +75,7 @@ export default function App() {
               <MapPin size={13} className="text-emerald-400" />
               <select
                 value={selectedStadiumId}
-                onChange={(e) => setSelectedStadiumId(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedStadiumId(e.target.value)}
                 className="text-xs bg-transparent text-slate-200 focus:outline-none cursor-pointer pr-1"
               >
                 {STADIUMS.map((stadium) => (

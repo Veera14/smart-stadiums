@@ -12,15 +12,19 @@ import assert from 'node:assert';
 import { Server } from 'http';
 
 // Dynamically import server after env variables are initialized
-const { app, ai } = await import('../server');
+const { app: testApp, ai: testAi } = await import('../server');
 
 let server: Server;
 let baseUrl: string;
-const originalGenerateContent = ai.models.generateContent;
+const originalGenerateContent = testAi.models.generateContent;
 
 before(() => {
+  if (!originalGenerateContent) {
+    throw new Error('Could not back up original generateContent function');
+  }
+
   // Monkey-patch Gemini API generateContent method to return static mock responses
-  ai.models.generateContent = async (options: any): Promise<any> => {
+  testAi.models.generateContent = async (options: any): Promise<any> => {
     const promptStr = typeof options.contents === 'string' 
       ? options.contents 
       : JSON.stringify(options.contents || options);
@@ -61,7 +65,7 @@ before(() => {
   };
 
   // Bind server to an arbitrary unused port (port 0)
-  server = app.listen(0);
+  server = testApp.listen(0);
   const port = (server.address() as any).port;
   baseUrl = `http://localhost:${port}`;
 });
@@ -71,7 +75,7 @@ after(() => {
     server.close();
   }
   // Restore original Gemini generateContent function
-  ai.models.generateContent = originalGenerateContent;
+  testAi.models.generateContent = originalGenerateContent;
 });
 
 test('POST /api/chat - Fan Concierge chatbot integration', async () => {

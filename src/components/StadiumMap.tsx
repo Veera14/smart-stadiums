@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { SensorData, SensorType } from '../types';
-import { MapPin, Info, Flame, AlertTriangle, CheckCircle } from 'lucide-react';
+import { SensorData } from '../types';
+import { MapPin, Info } from 'lucide-react';
 
 interface StadiumMapProps {
   sensors: SensorData[];
